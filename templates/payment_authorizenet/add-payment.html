@@ -1,0 +1,71 @@
+
+
+<p>Click one of the buttons below to add a new payment method for your practice.</p>
+<div id="payment-method">
+  <ol>
+    <button onclick="load_payment_form(this)">
+      ACH
+    </button>
+    <button onclick="load_payment_form(this)">
+      Credit Card
+    </button>
+  </ol>
+</div>
+
+<form id="id-form" style="display: none;">
+    {% csrf_token %}
+
+    <div id="form-fields"></div>
+    
+    <input type="submit" value="Save Payment Details"/>
+</form>
+
+<script>
+    var ach = 'ACH';
+    var creditCard = 'Credit Card';
+
+    var form_urls ={
+        ach : '{% url "payment-method-ajax" slugs.0 %}',
+        creditCard : '{% url "payment-method-ajax" slugs.1 %}',
+    }
+
+    function load_payment_form(btn) {
+
+        if(btn.innerText==ach) {
+            get_url = form_urls['ach'];
+            type = ach;
+            btn.disabled = true;            
+            disable = ach;
+        }
+        else if(btn.innerText==creditCard) {
+            get_url = form_urls['creditCard'];
+            type = creditCard;
+            btn.disabled = true;
+            disable = creditCard;
+        }
+
+        // dis/reenable buttons based on the last selection
+
+        buttons = document.querySelectorAll("button");
+
+        for(var i = 0; i < buttons.length; i++) {
+
+            if(buttons[i] == btn) {
+                buttons[i].disabled = true;
+            }
+            else {
+                buttons[i].disabled = false;
+            }
+        }
+
+        h2 = "<h2>Save a New " + type + " Payment Profile</h2><br/>";
+
+        $.get({'url': get_url}).done(
+
+               function(data) {
+                document.getElementById('form-fields').innerHTML = h2 + data;})
+
+        document.getElementById("id-form").style.display = "block";
+    }
+</script>
+{% endblock %}

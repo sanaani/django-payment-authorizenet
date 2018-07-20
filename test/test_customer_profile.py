@@ -6,7 +6,6 @@ from payment_authorizenet.enums import (
     AccountType,
     CustomerType,
     ValidationMode)
-import time
 
 
 class TestAuthorizeNetCustomerProfile(TestCase):
@@ -141,34 +140,23 @@ class TestAuthorizeNetCustomerProfile(TestCase):
         # any valid profile number is > 0, which evaluates to true as a bool
         self.assertTrue(updated_bank_account)
 
+        # sandbox eCheck has a maximum of $100 per transaction and $5,000
+        # per month. This value is set at $3 to allow for many tests
         transaction = cp.charge_customer_profile(
-            str(updated_bank_account), '999.99', 'ref id here')
+            str(updated_bank_account), '3.00', 'ref id here')
 
         print('result is', transaction.result)
         print('result == OK?', transaction.result == transaction.OK)
 
-        # self.assertEqual(transaction.result, transaction.OK)
+        self.assertEqual(transaction.result, transaction.APPROVED)
 
         transaction = cp.charge_customer_profile(
-            str(updated_credit_card), '999.99', 'ref id here')
+            str(updated_credit_card), '2.99', 'ref id here')
 
-        # self.assertEqual(transaction.result, transaction.OK)
+        self.assertEqual(transaction.result, transaction.APPROVED)
 
         # delete the echeck payment profile
         self.assertTrue(
-            cp.delete_customer_payment_profile(str(updated_bank_account)))
+            cp.delete_customer_payment_profile(str(updated_credit_card)))
 
         self.assertTrue(self.customer_profile.delete_customer_profile())
-
-
-"""
-from content.models.practices import Practice
-p = Practice.objects.get(pk=14)
-from payment_authorizenet.customer_profile import CustomerProfile
-cp = CustomerProfile(p)
-transaction = cp.charge_customer_profile('1504006837', '3050.50', 'Shell transaction')
-transaction.transaction_response.response_code
-transaction.approval_code
-
-transaction.transaction_response.response_code == int(transaction.approval_code)
-"""

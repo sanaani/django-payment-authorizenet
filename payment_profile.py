@@ -1,9 +1,4 @@
-from enum import Enum
-
-
-class PaymentType(Enum):
-    creditCard = 'creditCard'
-    bankAccount = 'bankAccount'
+from payment_authorizenet.enums import PaymentProfileType
 
 
 class PaymentProfile:
@@ -30,6 +25,9 @@ class CreditCard:
         if hasattr(creditCard, 'issuerNumber'):
             self.issuer_number = creditCard.issuerNumber
 
+    def __str__(self):
+        return '{} {}'.format(self.card_type, self.card_number)
+
 
 class BankAccount:
     """Stores details of an eCheck in PaymentProfile"""
@@ -45,6 +43,9 @@ class BankAccount:
         if hasattr(bank_account, 'bankName'):
             self.bank_name = bank_account.bankName
 
+    def __str__(self):
+        return '{} {}'.format(self.bank_name, self.account_number)
+
 
 class Payment:
 
@@ -56,12 +57,22 @@ class Payment:
         super().__init__()
         self.payment = payment
 
-        if hasattr(self.payment, PaymentType.creditCard.value):
+        if hasattr(self.payment, PaymentProfileType.creditCard.name):
+            print('setting credit card details')
             self.credit_card = CreditCard(payment.creditCard)
-            self.payment_type = 'Credit Card'
-        elif hasattr(self.payment, PaymentType.bankAccount.value):
+            self.payment_type = PaymentProfileType.creditCard
+            self.output = str(self.credit_card)
+            self.entity = self.credit_card.card_type
+            self.account_number = self.credit_card.card_number
+        elif hasattr(self.payment, PaymentProfileType.bankAccount.name):
+            print('setting bank account details')
             self.bank_account = BankAccount(payment.bankAccount)
-            self.payment_type = 'Bank Account'
+            self.payment_type = PaymentProfileType.bankAccount
+            self.output = str(self.bank_account)
+            self.entity = self.bank_account.bank_name
+            self.account_number = self.bank_account.account_number
+        else:
+            print('no payment was set')
 
     def __str__(self):
-        return self.payment_type
+        return self.output

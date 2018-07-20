@@ -22,6 +22,7 @@ class Transaction:
         # this exception if relying on the Authorize.net certificate
         # urllib.error.URLError: <urlopen error [SSL: CERTIFICATE_VERIFY
         # _FAILED] certificate verify failed (_ssl.c:748)>
+        # with Python 3.6.5
 
         ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -41,6 +42,7 @@ class Transaction:
                 self.result = self.APPROVED
             else:
                 self.result = self.FAILURE
+                print('Declined with response code ' + str(response_code))
 
             print('result is', self.result)
 
@@ -50,6 +52,13 @@ class Transaction:
 
 
 class TransactionResponse:
+    """TransactionResponse is a more details view of a Transaction.
+    Although the details are related to a Transaction, a design decision
+    was made to follow the organization of the Authorize.net API,
+    even though it could be improved"""
+
+    # fields are the expected attributes on the response object passed
+    # to __init__
 
     fields = {
         'responseCode': 'response_code',
@@ -90,6 +99,11 @@ class TransactionResponse:
 
 
 class Error:
+    """The organization of the HTML response for errors is messy. The Error
+    class organizes the information to make it easier to manipulate"""
+
+    # fields are the expected attributes on the response object passed
+    # to __init__
 
     fields = {
         'errorCode': 'error_code',
@@ -105,7 +119,11 @@ class Error:
 
 
 class Profile:
-    """Store customer and payment profile info of a Transaction"""
+    """Pass a resonse variable to pre-load the
+    customer and payment profile info related to a Transaction"""
+
+    # fields are the expected attributes on the response object passed
+    # to __init__
 
     fields = {
         'customerProfileId': 'customer_profile_id',
@@ -124,6 +142,7 @@ class Profile:
     }
 
     def __init__(self, response):
+        """Convert response properties into properties on this object"""
 
         profile = response.transactionResponse.profile
 

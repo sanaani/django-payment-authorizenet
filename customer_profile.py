@@ -1,17 +1,23 @@
 from authorizenet import apicontractsv1
 from authorizenet.apicontrollers import *
 from django.db import models
+from django.http import Http404
 from payment_authorizenet.enums import CustomerType, ValidationMode
 from payment_authorizenet.merchant_auth import AuthNet, AuthorizeNetError
 from payment_authorizenet.payment_profile import PaymentProfile
 from payment_authorizenet.transaction import Transaction
+import re
 
 OK = "Ok"
 
 
 class CustomerProfile(AuthNet):
     """A class based implementation to relate a Django model to the
-    creation of a CustomerProfile (aka CIM, Customer Information Manager)"""
+    creation of a CustomerProfile (aka CIM, Customer Information Manager)
+
+    CustomerProfile inherits from AuthNet,
+    which supplies credentials from settings
+    """
 
     def __init__(self, instance, *args, **kwargs):
         """Attach a django model to the insatnce attribute of this class"""
@@ -46,11 +52,12 @@ class CustomerProfile(AuthNet):
         createtransactionrequest.refId = str(ref_id)
 
         createtransactionrequest.transactionRequest = transactionrequest
-        createtransactioncontroller = createTransactionController(
+        controller = createTransactionController(
             createtransactionrequest)
-        createtransactioncontroller.execute()
+        controller.setenvironment(self.post_url)
+        controller.execute()
 
-        response = createtransactioncontroller.getresponse()
+        response = controller.getresponse()
 
         return Transaction(response)
 
@@ -70,6 +77,7 @@ class CustomerProfile(AuthNet):
             email)
 
         controller = createCustomerProfileController(createCustomerProfile)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         response = controller.getresponse()
@@ -83,7 +91,19 @@ class CustomerProfile(AuthNet):
             print('saved', self.instance)
             return True
         else:
-            raise AuthorizeNetError(response.messages.message[0]['text'].text)
+            error = response.messages.message[0]['text'].text
+            duplicate_text = 'A duplicate record with ID  already exists.'
+            error_no_digits = ''.join([i for i in error if not i.isdigit()])
+            profile_id_list = re.findall(r"\D(\d{10})\D", error)
+
+            if duplicate_text == error_no_digits and len(profile_id_list) == 1:
+                profile_id = profile_id_list[0]
+                self.instance.authorizenet_customer_profile_id = int(
+                    profile_id)
+                self.instance.save()
+                print('saved', self.instance)
+            else:
+                raise AuthorizeNetError(error)
 
     def make_billTo(
             first_name,
@@ -95,6 +115,7 @@ class CustomerProfile(AuthNet):
             zip_code,
             country,
             phone):
+        """Create a billTo object"""
 
         billTo = apicontractsv1.customerAddressType()
         billTo.firstName = first_name
@@ -113,7 +134,7 @@ class CustomerProfile(AuthNet):
             credit_card,
             expiration_date,
             card_code):
-        """Add/Edit a credit card details """
+        """Create a payment object with credit card details"""
 
         payment = apicontractsv1.paymentType()
 
@@ -131,9 +152,10 @@ class CustomerProfile(AuthNet):
             account_number,
             name_on_account,
             bank_name):
+        """Create a payment object with bank account details"""
 
         bankAccount = apicontractsv1.bankAccountType()
-        bankAccount.accountType = account_type.value
+        bankAccount.accountType = account_type.name
         bankAccount.routingNumber = routing_number
         bankAccount.accountNumber = account_number
         bankAccount.nameOnAccount = name_on_account
@@ -154,7 +176,9 @@ class CustomerProfile(AuthNet):
             company_name,
             set_as_default,
             validation_mode=ValidationMode.liveMode):
-        """Add a payment profile on the CIM"""
+        """Add a payment profile on the CIM.
+        This function is called as part of adding a credit card or echeck payment
+        profile. It is NOT intended to be directly called outside of this app"""
 
         if not isinstance(customer_type, CustomerType):
             msg = 'customer_type must be a CustomerType enum. ' \
@@ -170,20 +194,24 @@ class CustomerProfile(AuthNet):
 
         profile = apicontractsv1.customerPaymentProfileType()
         profile.payment = payment
-        profile.customerType = customer_type.value
+        profile.customerType = customer_type.name
         profile.billTo = CustomerProfile.make_billTo(
             first_name, last_name, company_name, address,
             city, state, zip_code, country, phone)
+
+        print(first_name, last_name, company_name, address,
+              city, state, zip_code, country, phone)
 
         createCustomerPaymentProfile = apicontractsv1.createCustomerPaymentProfileRequest()  # noqa
         createCustomerPaymentProfile.merchantAuthentication = self.merchantAuth
         createCustomerPaymentProfile.paymentProfile = profile
         createCustomerPaymentProfile.customerProfileId = str(
             self.instance.authorizenet_customer_profile_id)
-        createCustomerPaymentProfile.validationMode = validation_mode.value
+        createCustomerPaymentProfile.validationMode = validation_mode.name
 
         controller = createCustomerPaymentProfileController(
             createCustomerPaymentProfile)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         response = controller.getresponse()
@@ -195,7 +223,11 @@ class CustomerProfile(AuthNet):
             if set_as_default:
                 self.instance.authorizenet_default_payment_profile_id = int(
                     response.customerPaymentProfileId)
+                print('\tsaved as default')
                 self.instance.save()
+            else:
+                print('\tThis payment method is NOT the default')
+            
             return self.instance.authorizenet_default_payment_profile_id
         else:
             raise AuthorizeNetError(response.messages.message[0]['text'].text)
@@ -254,7 +286,22 @@ class CustomerProfile(AuthNet):
             use_model_address=True,
             set_as_default=True,
             validation_mode=ValidationMode.liveMode):
-        """Add a credit card payment profile on the CIM"""
+        """Add a credit card payment profile on the CIM
+        credit_card - a 16 character numeric string
+        expiration date - a string in the format YYYY-MM. ex: 2018-06
+            for June 2018
+        card_code - the CVV code on the back
+        customer_type - a CustomerType enumeration. Pass the enum itself
+            and not the name, nor the value. Example: CustomerType.business,
+            not CustomerType.business.name
+        contact_dictionary is assumed to be a dictionary containting the
+        following keys:
+            - address, city, state, zip_code, phone
+        use_model_address - take address, city, state, zip_code, phone from the model
+           and ignore contact_dictionary
+        set_as_default - set this payment profile as the default?
+        validation_mode - a ValidationMode enum
+        """
 
         contact_dictionary = self.create_contact_dictionary(
             use_model_address, contact_dictionary)
@@ -287,7 +334,21 @@ class CustomerProfile(AuthNet):
             use_model_address=True,
             set_as_default=True,
             validation_mode=ValidationMode.liveMode):
-        """Add an eCheck payment profile on the CIM"""
+        """Add an eCheck payment profile on the CIM
+        - account_type - an AccountType enum. Pass the enum itself and not name or value
+        - routing number
+        - account_number
+        - name on account - the name on the account,
+        - bank_name - the name of the bank
+        - customer_type - a CustomerType enum
+        - contact_dictionary is assumed to be a dictionary containting the
+        following keys:
+            - address, city, state, zip_code, phone
+        - use_model_address - take address, city, state, zip_code, phone from the model
+           and ignore contact_dictionary
+        - set_as_default - set this payment profile as the default?
+        - validation_mode - a ValidationMode enum
+        """
 
         contact_dictionary = self.create_contact_dictionary(
             use_model_address, contact_dictionary)
@@ -307,6 +368,18 @@ class CustomerProfile(AuthNet):
             validation_mode)
 
     def delete_customer_profile(self):
+        """Delete a Customer Profile"""
+
+        if not self.instance.authorizenet_customer_profile_id:
+
+            # try refereshing from database in case the model has been updated
+            self.instance.refresh_from_db()
+
+            # nothing has been updated and the ID is still None
+            if not self.instance.authorizenet_customer_profile_id:
+                msg = 'Cannot delete the profile id because it is not ' \
+                      'saved on the model'
+                raise ValueError(msg)
 
         deleteCustomerProfile = apicontractsv1.deleteCustomerProfileRequest()
         deleteCustomerProfile.merchantAuthentication = self.merchantAuth
@@ -314,6 +387,7 @@ class CustomerProfile(AuthNet):
             self.instance.authorizenet_customer_profile_id)
 
         controller = deleteCustomerProfileController(deleteCustomerProfile)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         response = controller.getresponse()
@@ -339,6 +413,7 @@ class CustomerProfile(AuthNet):
 
         controller = deleteCustomerPaymentProfileController(
             action)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         response = controller.getresponse()
@@ -352,21 +427,37 @@ class CustomerProfile(AuthNet):
     def get_customer_profile(self):
         """Used to retrive payment profiles"""
 
+        if not self.instance.authorizenet_customer_profile_id:
+            raise AuthorizeNetError('No profile id has been set')
+
         getCustomerProfile = apicontractsv1.getCustomerProfileRequest()
         getCustomerProfile.merchantAuthentication = self.merchantAuth
         getCustomerProfile.customerProfileId = str(
             self.instance.authorizenet_customer_profile_id)
         controller = getCustomerProfileController(getCustomerProfile)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         self.customer_profile = controller.getresponse()
         response = self.customer_profile
+
+        # raise 404 if you can't reach Authorize.net
+        if not hasattr(self.customer_profile, 'messages'):
+            raise Http404('Unable to retrieve payment data')
 
         if (self.customer_profile.messages.resultCode == OK):
             if hasattr(self.customer_profile, 'profile'):
                 if hasattr(self.customer_profile.profile, 'paymentProfiles'):
                     ppfs = self.customer_profile.profile.paymentProfiles
                     self.payment_profiles = [PaymentProfile(pp) for pp in ppfs]
+                    self.payment_profiles_dict = {
+                        pp.customer_payment_profile_id: pp
+                        for pp in self.payment_profiles}
+                else:
+                    self.payment_profiles = None
+                    self.payment_profiles_dict = None
+            else:
+                print('\t\t\tno profile attribute')
 
             # This section needs to be abstracted into objects
             # similar to PaymentProfile
@@ -420,9 +511,10 @@ class CustomerProfile(AuthNet):
         action.paymentProfile = paymentProfile
         action.customerProfileId = str(
             self.instance.authorizenet_customer_profile_id)
-        action.validationMode = validation_mode.value
+        action.validationMode = validation_mode.name
 
         controller = updateCustomerPaymentProfileController(action)
+        controller.setenvironment(self.post_url)
         controller.execute()
 
         response = controller.getresponse()

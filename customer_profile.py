@@ -33,7 +33,8 @@ class CustomerProfile(AuthNet):
 
         self.instance = instance
 
-    def charge_customer_profile(self, paymentProfileId, amount, ref_id):
+    def charge_customer_profile(
+            self, paymentProfileId, amount, ref_id, invoice_number):
 
         # create a customer payment profile
         profileToCharge = apicontractsv1.customerProfilePaymentType()
@@ -42,10 +43,14 @@ class CustomerProfile(AuthNet):
         profileToCharge.paymentProfile = apicontractsv1.paymentProfile()
         profileToCharge.paymentProfile.paymentProfileId = paymentProfileId
 
+        order = apicontractsv1.orderType()
+        order.invoiceNumber = str(invoice_number)
+
         transactionrequest = apicontractsv1.transactionRequestType()
         transactionrequest.transactionType = "authCaptureTransaction"
         transactionrequest.amount = amount
         transactionrequest.profile = profileToCharge
+        transactionrequest.order = order
 
         createtransactionrequest = apicontractsv1.createTransactionRequest()
         createtransactionrequest.merchantAuthentication = self.merchantAuth
@@ -103,7 +108,8 @@ class CustomerProfile(AuthNet):
                 self.instance.save()
                 print('saved', self.instance)
             else:
-                raise AuthorizeNetError(error)
+                raise AuthorizeNetError(
+                    response.messages.message[0]['text'].text)
 
     def make_billTo(
             first_name,
@@ -177,8 +183,9 @@ class CustomerProfile(AuthNet):
             set_as_default,
             validation_mode=ValidationMode.liveMode):
         """Add a payment profile on the CIM.
-        This function is called as part of adding a credit card or echeck payment
-        profile. It is NOT intended to be directly called outside of this app"""
+        This function is called as part of adding a credit card or echeck
+        payment profile. It is NOT intended to be directly called outside
+        of this app"""
 
         if not isinstance(customer_type, CustomerType):
             msg = 'customer_type must be a CustomerType enum. ' \
@@ -227,7 +234,7 @@ class CustomerProfile(AuthNet):
                 self.instance.save()
             else:
                 print('\tThis payment method is NOT the default')
-            
+
             return self.instance.authorizenet_default_payment_profile_id
         else:
             raise AuthorizeNetError(response.messages.message[0]['text'].text)
@@ -400,7 +407,7 @@ class CustomerProfile(AuthNet):
             return True
         else:
             print(response.messages.message[0]['text'].text)
-            raise AuthorizeNetError(response.messages.resultCode)
+            raise AuthorizeNetError(response.messages.message[0]['text'].text)
 
     def delete_customer_payment_profile(self, customerPaymentProfileId):
         """Delete a payment profile with a known ID"""
@@ -422,7 +429,7 @@ class CustomerProfile(AuthNet):
             return True
         else:
             print(response.messages.message[0]['text'].text)
-            raise AuthorizeNetError(response.messages.resultCode)
+            raise AuthorizeNetError(response.messages.message[0]['text'].text)
 
     def get_customer_profile(self):
         """Used to retrive payment profiles"""
@@ -444,6 +451,8 @@ class CustomerProfile(AuthNet):
         # raise 404 if you can't reach Authorize.net
         if not hasattr(self.customer_profile, 'messages'):
             raise Http404('Unable to retrieve payment data')
+
+        print(response.messages.message.text)
 
         if (self.customer_profile.messages.resultCode == OK):
             if hasattr(self.customer_profile, 'profile'):
@@ -477,7 +486,7 @@ class CustomerProfile(AuthNet):
                             response.subscriptionIds.subscriptionId):
                         print(subscriptionid)
         else:
-            raise AuthorizeNetError(response.messages.resultCode)
+            raise AuthorizeNetError(response.messages.message[0]['text'].text)
 
     def update_customer_payment_profile(
             self,

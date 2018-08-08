@@ -8,6 +8,7 @@ from payment_authorizenet import constants
 from payment_authorizenet.enums import (
     AccountType,
     CustomerType)
+from payment_authorizenet.merchant_auth import AuthorizeNetError
 
 
 # ****************** Validators
@@ -181,6 +182,35 @@ class CreditCardForm(ContactForm):
             fields[key] = self.fields.pop(key)
         self.fields = fields
 
+    def clean(self):
+        """Use the default clean(), then confirm that a valid month
+        and year were entered.
+        """
+
+        # start override
+        expiration_month = int(self.data['expiration_month'])
+        expiration_year = int(self.data['expiration_year'])
+
+        current_year = datetime.datetime.now().year
+        current_month = datetime.datetime.now().month
+
+        if expiration_year < current_year:
+            msg = _('The expiration year must be >={}')
+            self.add_error('expiration_year', msg.format(current_year))
+
+        if (expiration_year == current_year and
+                current_month > expiration_month):
+            msg = _('The card is past its expiration month. The card '
+                    'expired in {}, but it\'s currently {}')
+            self.add_error('expiration_month', msg.format(
+                calendar.month_name[expiration_month],
+                calendar.month_name[current_month]))
+
+        # use the default cleaning method
+        # This is at the end of the file to prevent invalid fields
+        # from being cleaned up before finding the error
+        super().clean()
+
     def create_payment_profile(self, customer_profile):
         """Create a Credit Card Payment Profile using this form
 
@@ -193,17 +223,22 @@ class CreditCardForm(ContactForm):
             self.cleaned_data['expiration_month'],
             self.cleaned_data['expiration_year'])
 
-        return customer_profile.create_customer_payment_profile_credit_card(
-            self.cleaned_data['credit_card_number'],
-            expiration,
-            self.cleaned_data['card_code'],
-            CustomerType[self.cleaned_data['customer_type']],
-            self.cleaned_data['first_name'],
-            self.cleaned_data['last_name'],
-            self.contact_dictionary,
-            self.cleaned_data['company_name'],
-            False,
-            self.cleaned_data['default_method'])
+        try:
+            profile_id = customer_profile.create_customer_payment_profile_credit_card(  # noqa
+                self.cleaned_data['credit_card_number'],
+                expiration,
+                self.cleaned_data['card_code'],
+                CustomerType[self.cleaned_data['customer_type']],
+                self.cleaned_data['first_name'],
+                self.cleaned_data['last_name'],
+                self.contact_dictionary,
+                self.cleaned_data['company_name'],
+                False,
+                self.cleaned_data['default_method'])
+
+            return profile_id
+        except AuthorizeNetError as err:
+            return str(err)
 
     # Form fields
 
@@ -255,19 +290,24 @@ class ECheckForm(ContactForm):
 
         super().create_payment_profile(customer_profile)
 
-        return customer_profile.create_customer_payment_profile_echeck(
-            AccountType[self.cleaned_data['account_type']],
-            self.cleaned_data['routing_number'],
-            self.cleaned_data['account_number'],
-            self.cleaned_data['name_on_account'],
-            self.cleaned_data['bank_name'],
-            CustomerType[self.cleaned_data['customer_type']],
-            self.cleaned_data['first_name'],
-            self.cleaned_data['last_name'],
-            self.contact_dictionary,
-            self.cleaned_data['company_name'],
-            False,
-            self.cleaned_data['default_method'])
+        try:
+            profile_id = customer_profile.create_customer_payment_profile_echeck(  # noqa
+                AccountType[self.cleaned_data['account_type']],
+                self.cleaned_data['routing_number'],
+                self.cleaned_data['account_number'],
+                self.cleaned_data['name_on_account'],
+                self.cleaned_data['bank_name'],
+                CustomerType[self.cleaned_data['customer_type']],
+                self.cleaned_data['first_name'],
+                self.cleaned_data['last_name'],
+                self.contact_dictionary,
+                self.cleaned_data['company_name'],
+                False,
+                self.cleaned_data['default_method'])
+
+            return profile_id
+        except AuthorizeNetError as err:
+            return str(err)
 
     # Form fields
 

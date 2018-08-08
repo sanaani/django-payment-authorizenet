@@ -143,7 +143,7 @@ class TestAuthorizeNetCustomerProfile(TestCase):
         # sandbox eCheck has a maximum of $100 per transaction and $5,000
         # per month. This value is set at $3 to allow for many tests
         transaction = cp.charge_customer_profile(
-            str(updated_bank_account), '3.00', 'ref id here')
+            str(updated_bank_account), '3.00', 'ref id here', 'Invoice #1')
 
         print('result is', transaction.result)
         print('result == OK?', transaction.result == transaction.OK)
@@ -151,7 +151,7 @@ class TestAuthorizeNetCustomerProfile(TestCase):
         self.assertEqual(transaction.result, transaction.APPROVED)
 
         transaction = cp.charge_customer_profile(
-            str(updated_credit_card), '2.99', 'ref id here')
+            str(updated_credit_card), '2.99', 'ref id here', 'Invoice #2')
 
         self.assertEqual(transaction.result, transaction.APPROVED)
 

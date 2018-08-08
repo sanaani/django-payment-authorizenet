@@ -54,7 +54,7 @@ The Authorize.net API uses camel-case syntax (eg, 'myVariable'), whereas most Py
 
 ## Help Me Help You
 
-Support this project by registering any new Authorize.net accounts using [this link](http://reseller.authorize.net/application/?resellerId=104913). Your costs are identical to registering directly with Authorize.net, but I earn commissions based on your use of the software. 
+Support this project by registering any new Authorize.net accounts using [this link](http://reseller.authorize.net/application/?resellerId=104913). Your costs are identical to registering directly with Authorize.net, but I earn commissions based on your use of the Authorize.net gateway. 
 
 http://reseller.authorize.net/application/?resellerId=104913
 
@@ -62,4 +62,4 @@ Or, if you already have an existing Authorize.net account...
 
 ### Add a New Merchant Service Processor (MSP) or Switch Your MSP for Better Pricing
 
-Email Shaun Overton at info@onestepremoved.com with your company information and phone number. My MSP solution integrates seamlessly with Authorize.net.
+Paying too much in credit card processing fees? Email Shaun Overton at info@onestepremoved.com with your company information and phone number. My MSP solution integrates seamlessly with Authorize.net.
